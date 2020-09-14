@@ -11,5 +11,5 @@ setup(
     url="https://github.com/CJWorkbench/converttexttonumber",
     packages=[""],
     py_modules=["duplicatecolumns"],
-    install_requires=["pandas==0.25.0"],
+    install_requires=["pandas==0.25.0", "cjwmodule~=1.5.5"],
 )

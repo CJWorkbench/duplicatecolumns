@@ -1,11 +1,17 @@
-from collections import namedtuple
+from typing import NamedTuple
 import unittest
 import pandas as pd
 from pandas.testing import assert_frame_equal
+from cjwmodule.testing.i18n import cjwmodule_i18n_message
 from duplicatecolumns import migrate_params, render
 
 
-RenderColumn = namedtuple("RenderColumn", ("format",))
+class RenderColumn(NamedTuple):
+    format: str = ""
+
+
+class Settings(NamedTuple):
+    MAX_BYTES_PER_COLUMN_NAME: int = 100
 
 
 class MigrateParamsTests(unittest.TestCase):
@@ -31,7 +37,12 @@ class DuplicateColumnsTests(unittest.TestCase):
             "B": RenderColumn("{:,.2f}"),
             "C": RenderColumn("{:,d}"),
         }
-        result = render(table, {"colnames": ["A", "C"]}, input_columns=input_columns)
+        result = render(
+            table,
+            {"colnames": ["A", "C"]},
+            settings=Settings(),
+            input_columns=input_columns,
+        )
         expected = pd.DataFrame(
             {
                 "A": [1, 2],
@@ -56,7 +67,9 @@ class DuplicateColumnsTests(unittest.TestCase):
             "Copy of A 1": RenderColumn("{:,.1%}"),
             "C": RenderColumn("{:,d}"),
         }
-        result = render(table, {"colnames": ["A"]}, input_columns=input_columns)
+        result = render(
+            table, {"colnames": ["A"]}, settings=Settings(), input_columns=input_columns
+        )
         expected = pd.DataFrame(
             {
                 "A": [1, 2],
@@ -68,3 +81,39 @@ class DuplicateColumnsTests(unittest.TestCase):
         )
         assert_frame_equal(result["dataframe"], expected)
         self.assertEqual(result["column_formats"], {"Copy of A 2": "{:,}"})
+
+    def test_create_too_long_column_names(self):
+        table = pd.DataFrame({"AAAAAAAAAA": [1], "AAAAAAAAAB": [2]})
+        input_columns = {"AAAAAAAAAA": RenderColumn(""), "AAAAAAAAAB": RenderColumn("")}
+        result = render(
+            table,
+            {"colnames": ["AAAAAAAAAA", "AAAAAAAAAB"]},
+            settings=Settings(MAX_BYTES_PER_COLUMN_NAME=12),
+            input_columns=input_columns,
+        )
+        expected = pd.DataFrame(
+            {
+                "AAAAAAAAAA": [1],
+                "Copy of AAAA": [1],
+                "AAAAAAAAAB": [2],
+                "Copy of AA 2": [2],
+            }
+        )
+        assert_frame_equal(result["dataframe"], expected)
+        self.assertEqual(
+            result["errors"],
+            [
+                cjwmodule_i18n_message(
+                    id="util.colnames.warnings.truncated",
+                    arguments={
+                        "n_columns": 2,
+                        "first_colname": "Copy of AAAA",
+                        "n_bytes": 12,
+                    },
+                ),
+                cjwmodule_i18n_message(
+                    id="util.colnames.warnings.numbered",
+                    arguments={"n_columns": 1, "first_colname": "Copy of AA 2"},
+                ),
+            ],
+        )
